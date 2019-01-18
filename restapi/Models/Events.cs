@@ -15,12 +15,17 @@ namespace restapi.Models
 
     public class Cancellation : Event
     {
-        public string Reason { get; set; }        
+        public string Reason { get; set; }
     }
 
     public class Rejection : Event
     {
-        public string Reason { get; set; }        
+        public string Reason { get; set; }
+    }
+
+    public class Deleted : Event
+    {
+      public string Reason {get; set;}
     }
 
     public class Approval : Event
