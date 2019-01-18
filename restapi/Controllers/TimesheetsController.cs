@@ -27,7 +27,7 @@ namespace restapi.Controllers
         {
             Timecard timecard = Database.Find(id);
 
-            if (timecard != null) 
+            if (timecard != null)
             {
                 return Ok(timecard);
             }
@@ -46,11 +46,63 @@ namespace restapi.Controllers
 
             var entered = new Entered() { Resource = resource.Resource };
 
-            timecard.Transitions.Add(new Transition(entered));
+              timecard.Transitions.Add(new Transition(entered));
 
-            Database.Add(timecard);
+              Database.Add(timecard);
 
-            return timecard;
+              return timecard;
+
+            else
+            {
+              return NotFound();
+            }
+        }
+
+        [HttpDelete("timecardId/delete/{Id}")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(404)]
+        public IActionResult DeleteTimeCard(string id){
+
+          Timecard timecard = Database.Find(id);
+
+          if(timecard.Status == TimecardStatus.Cancelled && timecard.Status == TimecardStatus.Draft)
+          {
+              return StatusCode(409, new InvalidStateError() { });
+          }
+
+          if (timecard == null)
+          {
+            return NotFound();
+          }
+
+          var transition = new Transition(deleted, TimecardStatus.Deleted);
+
+          timecard.Transition.Add(transition);
+
+          Database.Remove(timecard);
+
+          return Ok();
+        }
+
+        [HttpDelete("{id}")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(404)]
+        public IActionResult DeleteLine(string id)
+        {
+            Timecard timecard = Database.Find(id);
+
+            if (timecard == null)
+            {
+                return NotFound();
+            }
+
+            if (timecard.CanBeDeleted() == false)
+            {
+                    return StatusCode(409, new InvalidStateError() { });
+            }
+
+            Database.Delete(id);
+            return Ok();
         }
 
         [HttpGet("{id}/lines")]
@@ -84,7 +136,7 @@ namespace restapi.Controllers
         {
             Timecard timecard = Database.Find(id);
 
-            if (timecard != null)
+            if (timecard != null && timecard.Resource == timecardLine.Resource)
             {
                 if (timecard.Status != TimecardStatus.Draft)
                 {
@@ -100,7 +152,56 @@ namespace restapi.Controllers
                 return NotFound();
             }
         }
-        
+
+        [HttpPost("{timecardId}/lines/{lineId}")]
+        public IActionResult ReplaceLine(string timecardId, Guid lineId, [FromBody] TimecardLine timecardLine)
+        {
+            Timecard timecard = Database.Find(timecardId);
+
+            if (timecard == null)
+            {
+                return NotFound();
+            }
+
+            if (timecard.HasLine(lineId) == false)
+            {
+                // this might be better served by using some other 4xx error
+                // because there's actually a problem with both the resource
+                // we're updating and the request
+                return NotFound();
+            }
+
+            if (timecard.Resource != timecardLine.Resource)
+            {
+                return NotFound();
+            }
+
+            var result = timecard.ReplaceLine(lineId, timecardLine);
+            return Ok(result);
+        }
+
+        [HttpPatch("{timecardId}/lines/{lineId}")]
+        public IActionResult UpdateLine(string timecardId, Guid lineId, [FromBody] dynamic timecardLine)
+        {
+            Timecard timecard = Database.Find(timecardId);
+
+            if (timecard == null)
+            {
+                return NotFound();
+            }
+
+            if (timecard.HasLine(lineId) == false)
+            {
+                // this might be better served by using some other 4xx error
+                // because there's actually a problem with both the resource
+                // we're updating and the request
+                return NotFound();
+            }
+
+            var result = timecard.ReplaceLine(lineId, timecardLine);
+            return Ok(result);
+        }
+
         [HttpGet("{id}/transitions")]
         [Produces(ContentTypes.Transitions)]
         [ProducesResponseType(typeof(IEnumerable<Transition>), 200)]
@@ -129,7 +230,7 @@ namespace restapi.Controllers
         {
             Timecard timecard = Database.Find(id);
 
-            if (timecard != null)
+            if (timecard != null && timecard.Resource == submittal.Resource)
             {
                 if (timecard.Status != TimecardStatus.Draft)
                 {
@@ -140,7 +241,7 @@ namespace restapi.Controllers
                 {
                     return StatusCode(409, new EmptyTimecardError() { });
                 }
-                
+
                 var transition = new Transition(submittal, TimecardStatus.Submitted);
                 timecard.Transitions.Add(transition);
                 return Ok(transition);
@@ -169,9 +270,9 @@ namespace restapi.Controllers
                                         .OrderByDescending(t => t.OccurredAt)
                                         .FirstOrDefault();
 
-                    return Ok(transition);                                        
+                    return Ok(transition);
                 }
-                else 
+                else
                 {
                     return StatusCode(409, new MissingTransitionError() { });
                 }
@@ -192,13 +293,13 @@ namespace restapi.Controllers
         {
             Timecard timecard = Database.Find(id);
 
-            if (timecard != null)
+            if (timecard != null && timecard.Resource != cancellation.Resource)
             {
                 if (timecard.Status != TimecardStatus.Draft && timecard.Status != TimecardStatus.Submitted)
                 {
                     return StatusCode(409, new InvalidStateError() { });
                 }
-                
+
                 var transition = new Transition(cancellation, TimecardStatus.Cancelled);
                 timecard.Transitions.Add(transition);
                 return Ok(transition);
@@ -227,9 +328,9 @@ namespace restapi.Controllers
                                         .OrderByDescending(t => t.OccurredAt)
                                         .FirstOrDefault();
 
-                    return Ok(transition);                                        
+                    return Ok(transition);
                 }
-                else 
+                else
                 {
                     return StatusCode(409, new MissingTransitionError() { });
                 }
@@ -250,13 +351,13 @@ namespace restapi.Controllers
         {
             Timecard timecard = Database.Find(id);
 
-            if (timecard != null)
+            if (timecard != null && timecard.Resource != rejection.Resource)
             {
                 if (timecard.Status != TimecardStatus.Submitted)
                 {
                     return StatusCode(409, new InvalidStateError() { });
                 }
-                
+
                 var transition = new Transition(rejection, TimecardStatus.Rejected);
                 timecard.Transitions.Add(transition);
                 return Ok(transition);
@@ -285,9 +386,9 @@ namespace restapi.Controllers
                                         .OrderByDescending(t => t.OccurredAt)
                                         .FirstOrDefault();
 
-                    return Ok(transition);                                        
+                    return Ok(transition);
                 }
-                else 
+                else
                 {
                     return StatusCode(409, new MissingTransitionError() { });
                 }
@@ -297,7 +398,7 @@ namespace restapi.Controllers
                 return NotFound();
             }
         }
-        
+
         [HttpPost("{id}/approval")]
         [Produces(ContentTypes.Transition)]
         [ProducesResponseType(typeof(Transition), 200)]
@@ -308,13 +409,13 @@ namespace restapi.Controllers
         {
             Timecard timecard = Database.Find(id);
 
-            if (timecard != null)
+            if (timecard != null && timecard.Resource != approval.Resource)
             {
                 if (timecard.Status != TimecardStatus.Submitted)
                 {
                     return StatusCode(409, new InvalidStateError() { });
                 }
-                
+
                 var transition = new Transition(approval, TimecardStatus.Approved);
                 timecard.Transitions.Add(transition);
                 return Ok(transition);
@@ -343,9 +444,9 @@ namespace restapi.Controllers
                                         .OrderByDescending(t => t.OccurredAt)
                                         .FirstOrDefault();
 
-                    return Ok(transition);                                        
+                    return Ok(transition);
                 }
-                else 
+                else
                 {
                     return StatusCode(409, new MissingTransitionError() { });
                 }
@@ -354,6 +455,6 @@ namespace restapi.Controllers
             {
                 return NotFound();
             }
-        }        
+        }
     }
 }
